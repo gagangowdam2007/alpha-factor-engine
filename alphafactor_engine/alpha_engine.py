@@ -527,18 +527,27 @@ class DataIngestion:
         statement: pd.DataFrame,
         labels: Sequence[str],
     ) -> pd.Series:
-        """Return the first populated label, keyed by availability date."""
+        """Merge labels in priority order, keyed by availability date.
+
+        Yahoo can fill only some years under one label, so each later label
+        fills the years still missing.
+        """
         lag = pd.Timedelta(days=self.config.fundamental_lag_days)
+        merged = pd.Series(dtype=float, index=pd.DatetimeIndex([]))
+        if statement is None:
+            return merged
         for label in labels:
-            if statement is not None and label in statement.index:
+            if label in statement.index:
                 series = pd.to_numeric(
                     statement.loc[label],
                     errors="coerce",
                 ).dropna()
-                if not series.empty:
-                    series.index = pd.DatetimeIndex(series.index) + lag
-                    return series[~series.index.duplicated()].sort_index()
-        return pd.Series(dtype=float, index=pd.DatetimeIndex([]))
+                series.index = pd.DatetimeIndex(series.index) + lag
+                series = series[~series.index.duplicated()]
+                merged = (
+                    series if merged.empty else merged.combine_first(series)
+                )
+        return merged.sort_index()
 
 
 class FactorEngine:
