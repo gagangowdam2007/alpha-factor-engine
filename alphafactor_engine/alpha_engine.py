@@ -503,12 +503,15 @@ class DataIngestion:
         }
         try:
             handle = yf.Ticker(ticker)
+            info = handle.info
+            if not info.get("financialCurrency"):
+                # A throttled response would otherwise pass USD figures as INR.
+                raise ValueError("Yahoo returned no reporting currency")
             income, balance = handle.income_stmt, handle.balance_sheet
             record["net_income"] = self._line_item(income, self.INCOME_LABELS)
             record["equity"] = self._line_item(balance, self.EQUITY_LABELS)
             record["debt"] = self._line_item(balance, self.DEBT_LABELS)
             history = self._line_item(balance, self.SHARES_LABELS)
-            info = handle.info
             record["currency"] = info.get("financialCurrency")
             shares = info.get("sharesOutstanding")
             if shares:

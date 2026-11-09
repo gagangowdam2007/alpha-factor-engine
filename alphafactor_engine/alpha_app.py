@@ -48,7 +48,8 @@ AUTHOR = "Engineered by Gagan Gowda M"
 
 MAX_YEARS = 5
 CACHE_TTL_SECONDS = 12 * 60 * 60
-BACKTEST_CACHE_ENTRIES = 256
+BACKTEST_CACHE_ENTRIES = 32  # about 3.5 MB each; free hosting has little RAM
+MIN_FUNDAMENTAL_COVERAGE = 0.80
 LATE_START_TOLERANCE_DAYS = 45
 
 FACTOR_CONTROLS: tuple[tuple[str, str, int], ...] = (
@@ -181,8 +182,20 @@ def base_config(as_of: str) -> EngineConfig:
 
 @st.cache_data(ttl=CACHE_TTL_SECONDS, max_entries=3, show_spinner=False)
 def load_market_data(as_of: str) -> MarketData:
-    """Download and clean market data once, at the maximum horizon."""
-    return DataIngestion(base_config(as_of)).run()
+    """Download and clean market data once, at the maximum horizon.
+
+    Raising on thin fundamentals keeps a rate-limited response out of the
+    cache, because Streamlit does not cache exceptions.
+    """
+    data = DataIngestion(base_config(as_of)).run()
+    covered = data.net_income.notna().any()
+    if covered.mean() < MIN_FUNDAMENTAL_COVERAGE:
+        raise RuntimeError(
+            f"Yahoo Finance returned fundamentals for only {covered.sum()} "
+            f"of {covered.size} stocks, which usually means a temporary "
+            "rate limit. Please wait a few minutes and run it again."
+        )
+    return data
 
 
 @st.cache_data(ttl=CACHE_TTL_SECONDS, max_entries=3, show_spinner=False)
