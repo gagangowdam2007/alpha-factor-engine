@@ -874,6 +874,12 @@ def main() -> None:
         layout="wide",
         initial_sidebar_state="expanded",
     )
+    if st.query_params.get("diag") == "1":
+        from _diag_core import dump
+
+        today = date.today().isoformat()
+        st.code(dump(load_market_data(today), compute_factor_scores(today)))
+        return
     render_header()
 
     render_universe_panel()
